@@ -9,10 +9,21 @@ section .text
 
 ;===============================================================================
 ; Trampline for printf
+;-------------------------------------------------------------------------------
 MyPrintf:
+;    d   d   d   d   d   d   d   d   i   i   i   d   d   i   i   i   i   i   d   d   i
+;    x1  x2  x3  x4  x5  x6  x7  x8  r1  r2  r3  s0  s1  r4  r5  s2  s3  s4  s5  s6  s7
+;   -----------------------------------------------------------------------------------
+;    s0  s1  s2  s3  s4  s5  s6  s7  s8  s9  s10 s13 s14 s11 s12 s15 s16 s17 s18 s19 s20
+;
+;
+;
+;
+;
+
     ;---------------------------------------------------------------------------
     ; Saving return address in R11
-    pop r11 ;return address
+    pop r11
     ;---------------------------------------------------------------------------
     ; Pushing arguements which may be used in printf to stack
     ; Stack will be used later as an array of arguments
@@ -25,6 +36,17 @@ MyPrintf:
     ; Copying format string address to RSI from RDI (it is always 1st parameter)
     mov rsi, rdi
     ;---------------------------------------------------------------------------
+    ; Saving XMM registers in stack
+    lea rsp, [rsp - 8 * 8]
+    movq [rsp + 8 * 0], xmm0
+    movq [rsp + 8 * 1], xmm1
+    movq [rsp + 8 * 2], xmm2
+    movq [rsp + 8 * 3], xmm3
+    movq [rsp + 8 * 4], xmm4
+    movq [rsp + 8 * 5], xmm5
+    movq [rsp + 8 * 6], xmm6
+    movq [rsp + 8 * 7], xmm7
+    ;---------------------------------------------------------------------------
     ; Pushing registers that we need to save
     push rbx
     push rbp
@@ -33,8 +55,11 @@ MyPrintf:
     push r14
     push r15
     ;---------------------------------------------------------------------------
-    ; Address of first parameter in RBP (array pointer in printf)
-    lea rbp, [rsp + 8 * 6]
+    ; Address of first default parameter in RBP
+    lea rbp, [rsp + 8 * (6 + 8)]
+    ;---------------------------------------------------------------------------
+    ; Address of first double parameter in R8
+    lea r8, [rsp + 8 * (6 + 0)]
     ;---------------------------------------------------------------------------
     ; Jumping to printf which uses (all arguements are in stack)
     jmp MyPrintf_cdecl
@@ -51,10 +76,60 @@ MyPrintf:
     pop rbx
     ;---------------------------------------------------------------------------
     ; Deleting arguments that we pushed
-    add rsp, 8 * 5
+    add rsp, 8 * (5 + 8)
     ;---------------------------------------------------------------------------
     ; Returning to caller
     jmp r11
+;===============================================================================
+
+;===============================================================================
+; This macro outputs AL n times
+; Expects:          RCX - number of times to output AL(it is expected to be < 64)
+; Returns:          None
+; Destroys:         RCX
+;-------------------------------------------------------------------------------
+%macro PutAL_NTimes 0
+    add rcx, rdi
+    cmp rcx, MaxPointer
+    jl %%skip_clear_buffer
+        call ClearBuffer
+    %%skip_clear_buffer:
+    sub rcx, rdi
+    rep stosb
+%endmacro
+;===============================================================================
+
+;===============================================================================
+; This macro outputs AL 1 time
+; Expects:          None
+; Returns:          None
+;-------------------------------------------------------------------------------
+%macro PutAL 0
+    cmp rdi, MaxPointer
+    jl %%skip_clear_buffer
+        call ClearBuffer
+    %%skip_clear_buffer:
+    stosb
+%endmacro
+;===============================================================================
+
+;===============================================================================
+; This macro outputs AL 1 time
+; Expects:          RDI - dest buffer
+;                   RSI - source buffer
+;                   %1  - max address to compare with
+;                   RCX - number of symbols
+; Returns:          None
+;-------------------------------------------------------------------------------
+%macro CopyStrToBuf 1
+    add rdi, rcx
+    cmp rdi, %1
+    jl %%skip_clear_buffer
+        call ClearBuffer
+    %%skip_clear_buffer:
+    sub rdi, rcx
+    rep movsb
+%endmacro
 ;===============================================================================
 
 ;===============================================================================
@@ -89,12 +164,11 @@ MyPrintf:
 
 ;===============================================================================
 ; Macro which moves arguements to needed registers and calls writing number
-; Expects:          $1 - mask
-;                   $2 - shift
+; Expects:          %1 - mask
+;                   %2 - shift
 ;-------------------------------------------------------------------------------
 %macro HandleBinPowerNum 2
-    mov r9, [rbp]
-    add rbp, 8
+    call GetArgDefault
     ;---------------------------------------------------------------------------
     ; Mask to R10
     mov r10, %1
@@ -148,11 +222,7 @@ MyPrintf_cdecl:
         ;-----------------------------------------------------------------------
         ; Checking if end of buffer reached and writing symbol to buffer
         .add_symbol:
-        cmp rdi, MaxPointer
-        jl .skip_clear_buffer
-        call ClearBuffer
-        .skip_clear_buffer:
-        stosb
+        PutAL
         ;-----------------------------------------------------------------------
         jmp .loop_start
         ;-----------------------------------------------------------------------
@@ -191,16 +261,16 @@ MyPrintf_cdecl:
 ; Default
 ;-------------------------------------------------------------------------------
     .specifier_default:
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Adding the symbol after % and the % to buffer
         mov ah, al
         add ah, 'b'
         mov al, '%'
         stosw
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Resetting RAX register to zero
         xor rax, rax
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Going to the next symbol in string (start of main printf loop)
         jmp .loop_start
 
@@ -208,11 +278,11 @@ MyPrintf_cdecl:
 ; Charecter
 ;-------------------------------------------------------------------------------
     .specifier_character:
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Reading symbol to AL from stack
-        mov rax, [rbp]
-        add rbp, 8
-        ;-------------------------------------------------------------------
+        call GetArgDefault
+        mov al, r9b
+        ;-----------------------------------------------------------------------
         ; Going to adding symbol and checking the size in printf main loop
         jmp .add_symbol
 
@@ -238,14 +308,13 @@ MyPrintf_cdecl:
 ; Decimal number
 ;-------------------------------------------------------------------------------
     .specifier_decimal:
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Reading number to R9 from stack
-        mov r9, [rbp]
-        add rbp, 8
-        ;-------------------------------------------------------------------
+        call GetArgDefault
+        ;-----------------------------------------------------------------------
         ; Writing number in decimal form to buffer
         call ToDec
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Going to next symbol in printf main loop
         jmp .loop_start
 
@@ -253,71 +322,80 @@ MyPrintf_cdecl:
 ; String
 ;-------------------------------------------------------------------------------
     .specifier_string:
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Reading string address to R9 from stack
-        mov r9, [rbp]
-        add rbp, 8
-        ;-------------------------------------------------------------------
+        call GetArgDefault
+        ;-----------------------------------------------------------------------
         ; Counting number of bytes in string
         Strlen
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Comparing it with max availeble address
         mov rax, rcx
         add rax, rdi
         cmp rax, MaxPointer
         jl .write_buffer
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Outputting string to console with syscall if we can't put it in
         ; buffer
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
             ; Clearing buffer
             call ClearBuffer
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; Saving RDI and RSI
             push rdi
             push rsi
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; RAX = write system call
             mov rax, 1
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; RDI = file stream
             mov rdi, 1
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; RSI = string pointer
             mov rsi, r9
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; RDX = number of bytes to print
             mov rdx, rcx
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; Calling writing of string
             push r11
             syscall
             pop r11
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; Resetting registers
             pop rsi
             pop rdi
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Going to next symbol in main printf loop
         xor rax, rax
         jmp .loop_start
         .write_buffer:
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Adding string to buffer
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
             ; Saving RSI
             push rsi
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; Copying string address to RSI
             mov rsi, r9
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; Copying string to printf buffer
             rep movsb
-            ;---------------------------------------------------------------
+            ;-------------------------------------------------------------------
             ; Resetting RSI
             pop rsi
-        ;-------------------------------------------------------------------
+        ;-----------------------------------------------------------------------
         ; Going to next symbol in main printf loop
+        xor rax, rax
+        jmp .loop_start
+;-------------------------------------------------------------------------------
+; Double value
+;-------------------------------------------------------------------------------
+    .specifier_float:
+        call GetArgDouble
+        mov r10, 1
+        mov cl, 1
+        call PrintDouble
         xor rax, rax
         jmp .loop_start
 ;===============================================================================
@@ -336,7 +414,7 @@ ToDec:
         ;-----------------------------------------------------------------------
         ; Writing '-' to buffer
         mov al, '-'
-        stosb
+        PutAL
         ;-----------------------------------------------------------------------
         ; Reversing numbers sign
         not r9
@@ -355,10 +433,10 @@ ToDec:
     std
     ;---------------------------------------------------------------------------
     ; Counter in RBX
-    xor rbx, rbx
+    xor rcx, rcx
     ;---------------------------------------------------------------------------
     ; Devider in ECX
-    mov ecx, 10
+    mov ebx, 10
     ;---------------------------------------------------------------------------
     .loop_start:
         ;-----------------------------------------------------------------------
@@ -366,7 +444,7 @@ ToDec:
         mov eax, r9d
         mov rdx, r9
         shr rdx, 32
-        div ecx
+        div ebx
         ;-----------------------------------------------------------------------
         ; Copying quotient to R9
         mov r9, rax
@@ -376,7 +454,7 @@ ToDec:
         stosb
         ;-----------------------------------------------------------------------
         ; Incrementing counter of written symbols
-        inc rbx
+        inc rcx
         ;-----------------------------------------------------------------------
         ; Checking for zero in R9
         test r9, r9
@@ -392,20 +470,8 @@ ToDec:
     ; Resetting RDI to current buffer position
     pop rdi
     ;---------------------------------------------------------------------------
-    ; Counter in RCX
-    mov rcx, rbx
-    ;---------------------------------------------------------------------------
-    ; Checking if clearing buffer needed
-    add rbx, rdi
-    cmp rbx, MaxPointer
-    ;---------------------------------------------------------------------------
-    ; Writing buffer to console
-    jl .skip_clear_buffer
-    call ClearBuffer
-    .skip_clear_buffer:
-    ;---------------------------------------------------------------------------
-    ; Copying number buffer to main printf buffer
-    rep movsb
+    ; Checking if there is enough place to number in buffer and writing
+    CopyStrToBuf MaxPointer
     ;---------------------------------------------------------------------------
     ; Resetting RSI from stack
     pop rsi
@@ -466,23 +532,14 @@ ToBinPow:
     ; Address of last written symbol in RSI
     lea rsi, [rdi + 1]
     ;---------------------------------------------------------------------------
+    ; Counter in RCX
+    mov rcx, rbx
+    ;---------------------------------------------------------------------------
     ; Resetting RDI from stack
     pop rdi
     ;---------------------------------------------------------------------------
-    ; Number of digits in RCX
-    mov rcx, rbx
-    ;---------------------------------------------------------------------------
-    ; Checking if there is enough place to number in buffer
-    add rbx, rdi
-    cmp rbx, MaxPointer
-    ;---------------------------------------------------------------------------
-    ; Writing buffer to console if needed
-    jl .skip_clear_buffer
-    call ClearBuffer
-    .skip_clear_buffer:
-    ;---------------------------------------------------------------------------
-    ; Copying number buffer to main buffer
-    rep movsb
+    ; Checking if there is enough place to number in buffer and writing
+    CopyStrToBuf MaxPointer
     ;---------------------------------------------------------------------------
     ; Resetting RSI from stack
     pop rsi
@@ -524,11 +581,163 @@ ClearBuffer:
     pop rax
     ;---------------------------------------------------------------------------
     ; New value of RDI is buffer start
-    mov rdi, Buffer
+    lea rdi, [Buffer]
     ;---------------------------------------------------------------------------
     ret
 ;===============================================================================
 
+;===============================================================================
+; Prints double value
+;-------------------------------------------------------------------------------
+PrintDouble:
+    ;---------------------------------------------------------------------------
+    ; Copying XMM0 value to RAX and checking the sign bit
+    movq rax, xmm0
+    test rax, rax
+    ;---------------------------------------------------------------------------
+    jns .not_negative
+        ;-----------------------------------------------------------------------
+        ; Printing -
+        mov al, '-'
+        PutAL
+        ;-----------------------------------------------------------------------
+        ; XMM0 = 0 - XMM0
+        xorpd xmm1, xmm1
+        subsd xmm1, xmm0
+        movq xmm0, xmm1
+        ;-----------------------------------------------------------------------
+    .not_negative:
+    ;---------------------------------------------------------------------------
+    ; Copying XMM0 value to XMM1
+    movq xmm1, xmm0
+    ;---------------------------------------------------------------------------
+    ; Rounding XMM1 towards zeros
+    cvttsd2si r9, xmm1
+    cvtsi2sd xmm1, r9
+    ;---------------------------------------------------------------------------
+    ; Fraction in XMM0
+    subsd xmm0, xmm1
+    ;---------------------------------------------------------------------------
+    ; Muplyplying XMM0 by 10 SYMBOLS_IN_FRAC times
+    mov rcx, SYMBOLS_IN_FRAC
+    movq xmm1, [ValueOf10]
+    .multiplying_loop:
+        mulsd xmm0, xmm1
+    loop .multiplying_loop
+    ;---------------------------------------------------------------------------
+    ; Rounding the fraction and translating it into and integer in stack
+    roundsd xmm0, xmm0, 0
+    cvttsd2si rax, xmm0
+    push rax
+    ;---------------------------------------------------------------------------
+    ; This string is here to avoid splitting double values to different buffers
+    ; //TODO refactor it
+    call ClearBuffer
+    ;---------------------------------------------------------------------------
+    ; Printing the integer part of the number
+    call ToDec
+    ;---------------------------------------------------------------------------
+    ; Drawing separating point
+    mov al, '.'
+    PutAL
+    ;---------------------------------------------------------------------------
+    ; Getting fraction to R9 from stack, copying its value to R10
+    pop r9
+    mov r10, r9
+    ;---------------------------------------------------------------------------
+    ; Counter in RCX
+    xor rcx, rcx
+    ;---------------------------------------------------------------------------
+    ; Skipping first multyplying by 10
+    test r10, r10
+    jnz .zeros_test
+    ;---------------------------------------------------------------------------
+    ; Checking if the fraction is 0
+    mov rcx, 6
+    jmp .zeros_loop_end
+    ;---------------------------------------------------------------------------
+    .zeros_loop:
+        ;-----------------------------------------------------------------------
+        ; Multipying R10 by 10
+        mov r13, r10
+        shl r10, 3
+        shl r13, 1
+        add r10, r13
+        ;-----------------------------------------------------------------------
+        ; Incrementing counter of zeros
+        inc rcx
+        ;-----------------------------------------------------------------------
+        .zeros_test:
+        ;-----------------------------------------------------------------------
+        ; Comparing R10 and 10^(symbols in fraction)
+        cmp r10, FRAC_ZEROS_CH
+        ;-----------------------------------------------------------------------
+    jb .zeros_loop
+    .zeros_loop_end:
+    ;---------------------------------------------------------------------------
+    ; Printing fraction zeros
+    mov al, '0'
+    PutAL_NTimes
+    ;---------------------------------------------------------------------------
+    ; Printing fraction
+    call ToDec
+    ;---------------------------------------------------------------------------
+    ret
+;===============================================================================
+
+GetArgDefault:
+    mov r9, [rbp]
+
+    mov rax, r12
+    shl rax, 32
+    shr rax, 32
+    mov rbx, r12
+    shr rbx, 32
+
+    add rbp, 8
+
+    cmp rbx, 8
+    jb .skip_synch
+        cmp rax, 5 - 1
+        jne .skip_start_take_stack
+            mov rbp, r8
+        .skip_start_take_stack:
+        jbe .skip_synch
+        add r8, 8
+    .skip_synch:
+    inc r12
+    ret
+
+GetArgDouble:
+    movq xmm0, [r8]
+
+    mov rax, r12
+    shl rax, 32
+    shr rax, 32
+    mov rbx, r12
+    shr rbx, 32
+
+    add r8, 8
+    cmp rax, 5
+    jb .skip_synch
+        cmp rbx, 8 - 1
+        jne .skip_start_take_stack
+            mov r8, rbp
+        .skip_start_take_stack:
+        jbe .end_1
+        add rbp, 8
+    jmp .end_1
+    .skip_synch:
+        cmp rbx, 8 - 1
+        jne .skip_start_take_stack_1
+            add r8, 8 * 5
+        .skip_start_take_stack_1:
+    .end_1
+    inc rbx
+    shl rbx, 32
+    add rbx, rax
+    mov r12, rbx
+    ret
 ;-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 section .rodata
 ;-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -541,7 +750,7 @@ JmpTableSpecifiers:
                 dq MyPrintf_cdecl.specifier_character         ; c
                 dq MyPrintf_cdecl.specifier_decimal           ; d
                 dq MyPrintf_cdecl.specifier_default           ; e
-                dq MyPrintf_cdecl.specifier_default           ; f
+                dq MyPrintf_cdecl.specifier_float             ; f
                 dq MyPrintf_cdecl.specifier_default           ; g
                 dq MyPrintf_cdecl.specifier_default           ; h
                 dq MyPrintf_cdecl.specifier_default           ; i
@@ -563,6 +772,14 @@ JmpTableSpecifiers:
 ;===============================================================================
 
 ;===============================================================================
+; Double values for XMM registers
+;-------------------------------------------------------------------------------
+ValueOf10       dq 10.0
+SYMBOLS_IN_FRAC equ 6
+FRAC_ZEROS_CH   equ 100000
+;===============================================================================
+
+;===============================================================================
 ; Array of digits used in numbers printing
 ;-------------------------------------------------------------------------------
 Digits db "0123456789ABCDEF"
@@ -575,7 +792,7 @@ section .data
 ;===============================================================================
 ; Printf buffer
 ;-------------------------------------------------------------------------------
-Buffer          db 5 dup(0)
+Buffer          db 64 dup(0)
 MaxPointer      equ $
 ;===============================================================================
 
