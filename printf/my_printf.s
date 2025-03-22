@@ -11,16 +11,6 @@ section .text
 ; Trampline for printf
 ;-------------------------------------------------------------------------------
 MyPrintf:
-;    d   d   d   d   d   d   d   d   i   i   i   d   d   i   i   i   i   i   d   d   i
-;    x1  x2  x3  x4  x5  x6  x7  x8  r1  r2  r3  s0  s1  r4  r5  s2  s3  s4  s5  s6  s7
-;   -----------------------------------------------------------------------------------
-;    s0  s1  s2  s3  s4  s5  s6  s7  s8  s9  s10 s13 s14 s11 s12 s15 s16 s17 s18 s19 s20
-;
-;
-;
-;
-;
-
     ;---------------------------------------------------------------------------
     ; Saving return address in R11
     pop r11
@@ -54,6 +44,11 @@ MyPrintf:
     push r13
     push r14
     push r15
+    ;---------------------------------------------------------------------------
+    ; R12 and R13 will be used as a counter of used default and double
+    ; argument respectively. Setting them to zeros
+    xor r12, r12
+    xor r13, r13
     ;---------------------------------------------------------------------------
     ; Address of first default parameter in RBP
     lea rbp, [rsp + 8 * (6 + 8)]
@@ -124,10 +119,10 @@ MyPrintf:
 %macro CopyStrToBuf 1
     add rdi, rcx
     cmp rdi, %1
+    sub rdi, rcx
     jl %%skip_clear_buffer
         call ClearBuffer
     %%skip_clear_buffer:
-    sub rdi, rcx
     rep movsb
 %endmacro
 ;===============================================================================
@@ -553,7 +548,6 @@ ToBinPow:
 ClearBuffer:
     ;---------------------------------------------------------------------------
     ; Saving RAX, RSI, RCX and R11 in stack
-    push rax
     push rsi
     push rcx
     push r11
@@ -578,7 +572,6 @@ ClearBuffer:
     pop r11
     pop rcx
     pop rsi
-    pop rax
     ;---------------------------------------------------------------------------
     ; New value of RDI is buffer start
     lea rdi, [Buffer]
@@ -630,10 +623,6 @@ PrintDouble:
     cvttsd2si rax, xmm0
     push rax
     ;---------------------------------------------------------------------------
-    ; This string is here to avoid splitting double values to different buffers
-    ; //TODO refactor it
-    call ClearBuffer
-    ;---------------------------------------------------------------------------
     ; Printing the integer part of the number
     call ToDec
     ;---------------------------------------------------------------------------
@@ -641,15 +630,14 @@ PrintDouble:
     mov al, '.'
     PutAL
     ;---------------------------------------------------------------------------
-    ; Getting fraction to R9 from stack, copying its value to R10
-    pop r9
-    mov r10, r9
+    ; Getting fraction to R9 from stack, and copying its value to R10
+    mov r9, [rsp]
     ;---------------------------------------------------------------------------
     ; Counter in RCX
     xor rcx, rcx
     ;---------------------------------------------------------------------------
     ; Skipping first multyplying by 10
-    test r10, r10
+    test r9, r9
     jnz .zeros_test
     ;---------------------------------------------------------------------------
     ; Checking if the fraction is 0
@@ -658,11 +646,11 @@ PrintDouble:
     ;---------------------------------------------------------------------------
     .zeros_loop:
         ;-----------------------------------------------------------------------
-        ; Multipying R10 by 10
-        mov r13, r10
-        shl r10, 3
-        shl r13, 1
-        add r10, r13
+        ; Multipying R9 by 10
+        mov r10, r9
+        shl r9, 3
+        shl r10, 1
+        add r9, r10
         ;-----------------------------------------------------------------------
         ; Incrementing counter of zeros
         inc rcx
@@ -670,10 +658,11 @@ PrintDouble:
         .zeros_test:
         ;-----------------------------------------------------------------------
         ; Comparing R10 and 10^(symbols in fraction)
-        cmp r10, FRAC_ZEROS_CH
+        cmp r9, FRAC_ZEROS_CH
         ;-----------------------------------------------------------------------
     jb .zeros_loop
     .zeros_loop_end:
+    pop r9
     ;---------------------------------------------------------------------------
     ; Printing fraction zeros
     mov al, '0'
@@ -685,59 +674,98 @@ PrintDouble:
     ret
 ;===============================================================================
 
+;===============================================================================
+; Function to get next default arguement (default means not double)
+; Expects:          RBP - address of current default argument
+;                   R8  - address of current double argument
+;                   R12 - counter of used default arguments
+;                   R13 - counter of used double arguments
+; Returns:          R9  - current default argument value
+; Destroys:         None
+;-------------------------------------------------------------------------------
 GetArgDefault:
+    ;---------------------------------------------------------------------------
+    ; Argument in R9
     mov r9, [rbp]
-
-    mov rax, r12
-    shl rax, 32
-    shr rax, 32
-    mov rbx, r12
-    shr rbx, 32
-
+    ;---------------------------------------------------------------------------
+    ; Moving default argument address to next position
     add rbp, 8
-
-    cmp rbx, 8
-    jb .skip_synch
-        cmp rax, 5 - 1
-        jne .skip_start_take_stack
-            mov rbp, r8
-        .skip_start_take_stack:
-        jbe .skip_synch
-        add r8, 8
-    .skip_synch:
+    ;---------------------------------------------------------------------------
+    ; Incrementing counter of used default arguments
     inc r12
-    ret
-
-GetArgDouble:
-    movq xmm0, [r8]
-
-    mov rax, r12
-    shl rax, 32
-    shr rax, 32
-    mov rbx, r12
-    shr rbx, 32
-
-    add r8, 8
-    cmp rax, 5
+    ;---------------------------------------------------------------------------
+    ; Synchronizing default and double pointers if all paramenters from XMM
+    ; were handled
+    cmp r13, 8
     jb .skip_synch
-        cmp rbx, 8 - 1
-        jne .skip_start_take_stack
-            mov r8, rbp
-        .skip_start_take_stack:
-        jbe .end_1
-        add rbp, 8
-    jmp .end_1
+        ;-----------------------------------------------------------------------
+        cmp r12, 5
+        ;-----------------------------------------------------------------------
+        ; If last default argument from registers was handled we move default
+        ; agument address in RBP to current double argument address in R8
+        cmove rbp, r8
+        ;-----------------------------------------------------------------------
+        ; If all default arguments from registers were alredy handled we
+        ; move doubles address in respect with default address
+        jbe .skip_synch
+            add r8, 8
+        ;-----------------------------------------------------------------------
     .skip_synch:
-        cmp rbx, 8 - 1
-        jne .skip_start_take_stack_1
-            add r8, 8 * 5
-        .skip_start_take_stack_1:
-    .end_1
-    inc rbx
-    shl rbx, 32
-    add rbx, rax
-    mov r12, rbx
+    ;---------------------------------------------------------------------------
     ret
+;===============================================================================
+
+;===============================================================================
+; Function to get next double argument
+; Expects:          RBP         - address of current default argument
+;                   R8          - address of current double argument
+;                   R12         - counter of used default arguments
+;                   R13         - counter of used double arguments
+;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+; Returns:          XMM0        - current double argument value
+;- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+; Destroys:         None
+;-------------------------------------------------------------------------------
+GetArgDouble:
+    ;---------------------------------------------------------------------------
+    ; Argument value in XMM0
+    movq xmm0, [r8]
+    ;---------------------------------------------------------------------------
+    ; Moving double argument value to next
+    add r8, 8
+    ;---------------------------------------------------------------------------
+    ; Incrementing double arguments counter
+    inc r13
+    ;---------------------------------------------------------------------------
+    ; Synchronizing if we used all default arguments from registers
+    cmp r12, 5
+    jb .skip_synch
+        ;-----------------------------------------------------------------------
+        cmp r13, 8
+        ;-----------------------------------------------------------------------
+        ; If we just used last double arguments from XMM registers we move
+        ; current double address to current default arguments address
+        cmove r8, rbp
+        ;-----------------------------------------------------------------------
+        ; If we already used all double arguments from XMM registers we move
+        ; default argument address in respect with double argument address
+        jbe .skip_skipping_defaults
+            add rbp, 8
+        ;-----------------------------------------------------------------------
+    jmp .skip_skipping_defaults
+    ;---------------------------------------------------------------------------
+    ; If we did not used all default arguments but just handled last
+    ; double argument from registers we need to skip defaults from stack
+    ; as they are just above doubles
+    .skip_synch:
+        cmp r13, 8
+        jne .skip_skipping_defaults
+            add r8, 8 * 5
+    .skip_skipping_defaults
+    ;---------------------------------------------------------------------------
+    ret
+;===============================================================================
+
 ;-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 section .rodata
 ;-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
@@ -751,23 +779,11 @@ JmpTableSpecifiers:
                 dq MyPrintf_cdecl.specifier_decimal           ; d
                 dq MyPrintf_cdecl.specifier_default           ; e
                 dq MyPrintf_cdecl.specifier_float             ; f
-                dq MyPrintf_cdecl.specifier_default           ; g
-                dq MyPrintf_cdecl.specifier_default           ; h
-                dq MyPrintf_cdecl.specifier_default           ; i
-                dq MyPrintf_cdecl.specifier_default           ; j
-                dq MyPrintf_cdecl.specifier_default           ; k
-                dq MyPrintf_cdecl.specifier_default           ; l
-                dq MyPrintf_cdecl.specifier_default           ; m
-                dq MyPrintf_cdecl.specifier_default           ; n
+                dq 'o' - 'f' - 1 dup( MyPrintf_cdecl.specifier_default )
                 dq MyPrintf_cdecl.specifier_octal             ; o
-                dq MyPrintf_cdecl.specifier_default           ; p
-                dq MyPrintf_cdecl.specifier_default           ; q
-                dq MyPrintf_cdecl.specifier_default           ; r
+                dq 's' - 'o' - 1 dup( MyPrintf_cdecl.specifier_default )
                 dq MyPrintf_cdecl.specifier_string            ; s
-                dq MyPrintf_cdecl.specifier_default           ; t
-                dq MyPrintf_cdecl.specifier_default           ; u
-                dq MyPrintf_cdecl.specifier_default           ; v
-                dq MyPrintf_cdecl.specifier_default           ; w
+                dq 'x' - 's' - 1 dup( MyPrintf_cdecl.specifier_default )
                 dq MyPrintf_cdecl.specifier_hexadecimal       ; x
 ;===============================================================================
 

@@ -57,6 +57,7 @@ ${ASM_OBJ}:
 	nasm -f elf64 -l ${BINDIR}/${ASM_LST} ${ASM_FILE} -o ${BINDIR}/${ASM_OBJ}
 clean:
 	rm -rf ${BINDIR}
+	rm ${OUTPUTmak}
 ${SOURCE}:
 
 ${BINDIR}:
