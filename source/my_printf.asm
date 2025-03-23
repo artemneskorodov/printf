@@ -151,6 +151,7 @@ MyPrintf:
     ;---------------------------------------------------------------------------
     ; Reversing RCX to get number of bytes
     not rcx
+    dec rcx
     ;---------------------------------------------------------------------------
     ; Resetting RDI from stack
     pop rdi
