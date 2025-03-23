@@ -8,7 +8,7 @@
 
 static const size_t BufferSize = 2048;
 
-static void write_splitter(color_t color);
+static void write_output(const char *buffer_1, const char *buffer_2);
 
 #define TEST_PRINTF(_test_num, _description, ...) {                                 \
     memset(buffer_1, 0, BufferSize);                                                \
@@ -37,6 +37,7 @@ static void write_splitter(color_t color);
     }                                                                               \
                                                                                     \
     color_printf(frame_color, BOLD_TEXT, DEFAULT_BACKGROUND,                        \
+        "\n\n\n"                                                                    \
         "╔══════════════════════════════╦══════════════════════════════╗\n"         \
         "║           Test %.2d            ║            %s            ║\n"           \
         "╠══════════════════════════════╩══════════════════════════════╣\n"         \
@@ -44,24 +45,26 @@ static void write_splitter(color_t color);
         "╚═════════════════════════════════════════════════════════════╝\n",        \
                  (_test_num), result, (_description));                              \
     if(show_result) {                                                               \
-        write_splitter(YELLOW_TEXT);                                                \
-        color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                    \
-                     "MyPrintf output:\n");                                         \
-        color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,                 \
-                     "%s\n", buffer_1);                                             \
-        write_splitter(YELLOW_TEXT);                                                \
-        color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                    \
-                     "printf output:\n");                                           \
-        color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,                 \
-                     "%s\n", buffer_2);                                             \
-        write_splitter(YELLOW_TEXT);                                                \
+        write_output(buffer_1, buffer_2);                                           \
     }                                                                               \
     fflush(stdout);                                                                 \
 }
 
-void write_splitter(color_t color) {
-    color_printf(color, BOLD_TEXT, DEFAULT_BACKGROUND,
-        "╞---------------------------------------------------------------\n");
+void write_output(const char *buffer_1, const char *buffer_2) {
+    color_printf(MAGENTA_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,
+        "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━OUTPUTS━━━━━━━━━━━━━━━━━━━━━━━━━━━┓\n");
+    color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,
+        "╭─────────────────────────────────────────────────────────────╮\n"
+        "╰─ MyPrintf output: ──────────────────────────────────────────╯\n");
+    color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,
+        "%s\n", buffer_1);
+    color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,
+        "╭─────────────────────────────────────────────────────────────╮\n"
+        "╰─ printf output: ────────────────────────────────────────────╯\n");
+    color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,
+        "%s\n", buffer_2);
+    color_printf(MAGENTA_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,
+        "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━OUTPUTS━━━━━━━━━━━━━━━━━━━━━━━━━━━┛\n");
 }
 
 int main(int argc, const char *argv[]) {
@@ -80,8 +83,11 @@ int main(int argc, const char *argv[]) {
                 "%f %f %f",
                 123.4, 123.4, 123.4);
     TEST_PRINTF(2,  "Check doubles and default arguments",
-                "%d   %f   %f   %d   %d   %f   %d   %f   %d   %d   %d   %f   %f   %d   %f   %d   %f   %d   %f   %f   %f   %f   %d",
-                  1,  .2,  .3,   4,   5,  .6,   7,  .8,   9,  10,  11, .12, .13,  14, .15,  16, .17,  18, .19, .20, .21, .22,  23);
+                "%d   %f   %f   %d   %d   %f   %d   %f   %d \n"
+                "%d   %d   %f   %f   %d   %f   %d   %f \n"
+                "%d   %f   %f   %f   %f   %d",
+                1, .2, .3, 4, 5, .6, 7, .8, 9, 10, 11,
+                .12, .13, 14, .15, 16, .17, 18, .19, .20, .21, .22, 23);
     TEST_PRINTF(3,  "Check short string",
                 "%s %d %f",
                 "Testing string with no much symbols",
@@ -89,24 +95,12 @@ int main(int argc, const char *argv[]) {
                 12.3);
     TEST_PRINTF(4,  "Check long string",
                 "%s",
-                "Very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "Very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "Very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
-                "very very very very very very very very very very very very very very very very very very very "
+                "Very very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very very\n"
                 "long string");
     return EXIT_SUCCESS;
 }
