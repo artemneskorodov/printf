@@ -8,10 +8,9 @@
 
 static const size_t BufferSize = 2048;
 
-static void write_result(bool same);
 static void write_splitter(color_t color);
 
-#define TEST_PRINTF(_test_num, ...) {                                               \
+#define TEST_PRINTF(_test_num, _description, ...) {                                 \
     memset(buffer_1, 0, BufferSize);                                                \
     memset(buffer_2, 0, BufferSize);                                                \
     if( pipe(out_pipe) != 0 ) {                                                     \
@@ -30,51 +29,46 @@ static void write_splitter(color_t color);
                                                                                     \
     dup2(saved_stdout, STDOUT_FILENO);                                              \
                                                                                     \
-    bool same = true;                                                               \
+    color_t frame_color = GREEN_TEXT;                                               \
+    const char *result = "  OK  ";                                                  \
     if(strcmp(buffer_1, buffer_2) != 0) {                                           \
-        same = false;                                                               \
+        result = "ERROR!";                                                          \
+        frame_color = RED_TEXT;                                                     \
     }                                                                               \
-    color_printf(MAGENTA_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                       \
-        "|==============================================================|\n"        \
-        "|                        Test number %.2d                        |\n"      \
-        "|==============================================================|\n",       \
-                 (_test_num));                                                      \
-    write_splitter(YELLOW_TEXT);                                                    \
-    color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                        \
-                 "MyPrintf output:\n");                                             \
-    color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,                     \
-                 "%s\n", buffer_1);                                                 \
-    write_splitter(YELLOW_TEXT);                                                    \
-    color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                        \
-                 "printf output:\n");                                               \
-    color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,                     \
-                 "%s\n", buffer_2);                                                 \
-    write_splitter(YELLOW_TEXT);                                                    \
-    write_result(same);                                                             \
+                                                                                    \
+    color_printf(frame_color, BOLD_TEXT, DEFAULT_BACKGROUND,                        \
+        "╔══════════════════════════════╦══════════════════════════════╗\n"         \
+        "║           Test %.2d            ║            %s            ║\n"           \
+        "╠══════════════════════════════╩══════════════════════════════╣\n"         \
+        "║ %59s ║\n"                                                                \
+        "╚═════════════════════════════════════════════════════════════╝\n",        \
+                 (_test_num), result, (_description));                              \
+    if(show_result) {                                                               \
+        write_splitter(YELLOW_TEXT);                                                \
+        color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                    \
+                     "MyPrintf output:\n");                                         \
+        color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,                 \
+                     "%s\n", buffer_1);                                             \
+        write_splitter(YELLOW_TEXT);                                                \
+        color_printf(YELLOW_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,                    \
+                     "printf output:\n");                                           \
+        color_printf(DEFAULT_TEXT, NORMAL_TEXT, DEFAULT_BACKGROUND,                 \
+                     "%s\n", buffer_2);                                             \
+        write_splitter(YELLOW_TEXT);                                                \
+    }                                                                               \
     fflush(stdout);                                                                 \
 }
 
 void write_splitter(color_t color) {
     color_printf(color, BOLD_TEXT, DEFAULT_BACKGROUND,
-        "----------------------------------------------------------------\n");
+        "╞---------------------------------------------------------------\n");
 }
 
-void write_result(bool same) {
-    if(same) {
-        color_printf(GREEN_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,
-            "|==============================================================|\n"
-            "|                              OK                              |\n"
-            "|==============================================================|\n\n\n\n\n");
+int main(int argc, const char *argv[]) {
+    bool show_result = false;
+    if(argc == 2 && strcmp(argv[1], "-p") == 0) {
+        show_result = true;
     }
-    else {
-        color_printf(RED_TEXT, BOLD_TEXT, DEFAULT_BACKGROUND,
-            "|==============================================================|\n"
-            "|                             ERROR                            |\n"
-            "|==============================================================|\n\n\n\n\n");
-    }
-}
-
-int main(void) {
     char buffer_1[BufferSize] = {0};
     char buffer_2[BufferSize] = {0};
     int out_pipe[2];
@@ -82,18 +76,18 @@ int main(void) {
 
     saved_stdout = dup(STDOUT_FILENO);
 
-    TEST_PRINTF(1,
+    TEST_PRINTF(1,  "Check tests",
                 "%f %f %f",
                 123.4, 123.4, 123.4);
-    TEST_PRINTF(2,
+    TEST_PRINTF(2,  "Check doubles and default arguments",
                 "%d   %f   %f   %d   %d   %f   %d   %f   %d   %d   %d   %f   %f   %d   %f   %d   %f   %d   %f   %f   %f   %f   %d",
                   1,  .2,  .3,   4,   5,  .6,   7,  .8,   9,  10,  11, .12, .13,  14, .15,  16, .17,  18, .19, .20, .21, .22,  23);
-    TEST_PRINTF(3,
+    TEST_PRINTF(3,  "Check short string",
                 "%s %d %f",
                 "Testing string with no much symbols",
                 12,
                 12.3);
-    TEST_PRINTF(4,
+    TEST_PRINTF(4,  "Check long string",
                 "%s",
                 "Very very very very very very very very very very very very very very very very very very very "
                 "very very very very very very very very very very very very very very very very very very very "

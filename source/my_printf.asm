@@ -182,14 +182,15 @@ MyPrintf:
 
 ;===============================================================================
 ; Function with formatted print. Supported specifiers are:
-; |%c|x|
-; |%b|x|
-; |%x|x|
-; |%o|x|
-; |%%|x|
-; |%d|x|
-; |%s|x|
-; Expects:          STACK[ 0 ]  - format string address
+;  - %c  -  character
+;  - %b  -  binary number
+;  - %x  -  hexadecimal number
+;  - %o  -  octal number
+;  - %%  -  %
+;  - %d  -  decimal number
+;  - %s  -  string
+;  - %f  -  double number
+; Expects:          RDI         - format string address
 ;                   STACK[...]  - arguments
 ; Returns:          None
 ;-------------------------------------------------------------------------------
