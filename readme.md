@@ -27,6 +27,12 @@ Function supports fastcall and can be used from C and C++.
 ```
 You can also use flag '-p' to make test program show cases.
 * Including to your project
+```cpp
+    #include "my_printf.h"
+    int main(void) {
+        MyPrintf("Testing output of double number: %f", 123.456);
+    }
+```
 ```bash
     g++ 'your file' -I {path to printf}/include {path to printf}/bin/my_printf.o
 ```

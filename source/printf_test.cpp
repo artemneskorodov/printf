@@ -83,9 +83,9 @@ int main(int argc, const char *argv[]) {
                 "%f %f %f",
                 123.4, 123.4, 123.4);
     TEST_PRINTF(2,  "Check doubles and default arguments",
-                "%d   %f   %f   %d   %d   %f   %d   %f   %d \n"
-                "%d   %d   %f   %f   %d   %f   %d   %f \n"
-                "%d   %f   %f   %f   %f   %d",
+                "%d %f %f %d %d %f %d %f %d \n"
+                "%d %d %f %f %d %f %d %f\n"
+                "%d %f %f %f %f %d",
                 1, .2, .3, 4, 5, .6, 7, .8, 9, 10, 11,
                 .12, .13, 14, .15, 16, .17, 18, .19, .20, .21, .22, 23);
     TEST_PRINTF(3,  "Check short string",
@@ -95,12 +95,12 @@ int main(int argc, const char *argv[]) {
                 12.3);
     TEST_PRINTF(4,  "Check long string",
                 "%s",
-                "Very very very very very very very very very very very very very\n"
-                "very very very very very very very very very very very very very\n"
-                "very very very very very very very very very very very very very\n"
-                "very very very very very very very very very very very very very\n"
-                "very very very very very very very very very very very very very\n"
-                "very very very very very very very very very very very very very\n"
+                "Very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very\n"
+                "very very very very very very very very very very very very\n"
                 "long string");
     return EXIT_SUCCESS;
 }
