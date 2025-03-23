@@ -1,14 +1,14 @@
 # MyPrintf
 ## About the project
 This is custom implementation of limited printf. Supported formats are:
-- '%c' for character
-- '%b' for binary number
-- '%x' for hexadecimal number
-- '%o' for octal number
-- '%%' for %
-- '%d' for decimal number
-- '%s' for string
-- '%f' for double number
+- `%c` for character
+- `%b` for binary number
+- `%x` for hexadecimal number
+- `%o` for octal number
+- `%%` for %
+- `%d` for decimal number
+- `%s` for string
+- `%f` for double number
 Function supports fastcall and can be used from C and C++.
 ## Install
 * Cloning a repository
