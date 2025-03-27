@@ -102,5 +102,10 @@ int main(int argc, const char *argv[]) {
                 "very very very very very very very very very very very very\n"
                 "very very very very very very very very very very very very\n"
                 "long string");
+
+    int a = 0;
+    printf("%p \n", &a);
+
+    MyPrintf("%b %o %x %s %s %s %s %s %f aovaovavoaov", 12 ,12 , 13, "aviva",  "aviva", "aviva", "aviva", "aviva", 123.43764);
     return EXIT_SUCCESS;
 }
